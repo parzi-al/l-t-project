@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Car Model Interface</title>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <style>
+        body {
+            margin-top: 20px;
+        }
+        .output {
+            margin-top: 15px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="text-center">Car Model Training and Prediction</h1>
+
+        <!-- Car Model Details -->
+        <div class="card mt-4">
+            <div class="card-header">
+                <h3>Car Model Details</h3>
+            </div>
+            <div class="card-body">
+                <button class="btn btn-info mb-3" onclick="fetchCarModelDetails()">View Model Info</button>
+                <p id="car-model-details" class="output"></p>
+            </div>
+        </div>
+
+        <!-- Car MPG Training and Prediction -->
+        <div class="card mt-4">
+            <div class="card-header">
+                <h3>Car MPG Prediction</h3>
+            </div>
+            <div class="card-body">
+                <button class="btn btn-success mb-3" onclick="trainCarModel()">Train Model</button>
+                <p id="car-training-status" class="output"></p>
+
+                <form>
+                    <div class="form-group">
+                        <label for="car-mpg-features">Enter Features (Comma-Separated):</label>
+                        <input type="text" id="car-mpg-features" class="form-control" placeholder="8,304,3433,12,70">
+                    </div>
+                    <button type="button" class="btn btn-primary" onclick="predictCarMPG()">Predict</button>
+                </form>
+                <p id="car-mpg-result" class="output"></p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function fetchCarModelDetails() {
+            fetch('/car_model', { method: 'GET' })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        document.getElementById('car-model-details').innerText = `Error: ${data.error}`;
+                    } else {
+                        const details = `
+                            <b>Model Trained:</b> ${data.trained ? "Yes" : "No"}<br>
+                            <b>Expected Features:</b> ${data.expected_features.join(", ")}<br>
+                            <b>Sample Input:</b> ${data.sample_input}
+                        `;
+                        document.getElementById('car-model-details').innerHTML = details;
+                    }
+                })
+                .catch(error => {
+                    document.getElementById('car-model-details').innerText = `Error: ${error.message}`;
+                });
+        }
+
+        function trainCarModel() {
+            fetch('/start-training-car', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('car-training-status').innerText = data.message || 'Training initiated!';
+                })
+                .catch(error => {
+                    document.getElementById('car-training-status').innerText = `Error: ${error.message}`;
+                });
+        }
+
+        function predictCarMPG() {
+            const inputString = document.getElementById('car-mpg-features').value;
+            const inputArray = inputString.split(',').map(Number);
+            const inputData = {
+                cylinders: inputArray[0],
+                displacement: inputArray[1],
+                weight: inputArray[2],
+                acceleration: inputArray[3],
+                "model year": inputArray[4]
+            };
+
+            fetch('/predict-car-mpg', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ input: inputData })
+            })
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('car-mpg-result').innerText =
+                        data.car_name ? `Predicted Car: ${data.car_name}` : `Error: ${data.error}`;
+                })
+                .catch(error => {
+                    document.getElementById('car-mpg-result').innerText = `Error: ${error.message}`;
+                });
+        }
+    </script>
+</body>
+</html>
