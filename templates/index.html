@@ -110,7 +110,7 @@
     {% for model_name in model_summaries.keys() %}
     <div class="hello">
 
-        <button class="btn" onclick="showModel('model-{{ loop.index }}')">{{ model_name }}</button>
+        <button class="btn" onmouseenter="showModel('model-{{ loop.index }}')">{{ model_name }}</button>
     </div>
     {% endfor %}
 
