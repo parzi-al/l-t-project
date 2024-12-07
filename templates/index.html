@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Model Summaries</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #333;
+        }
+        .model-container {
+            display: none; /* Hide all containers initially */
+            margin-top: 20px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background-color: #f9f9f9;
+        }
+        .model-title {
+            font-size: 18px;
+            font-weight: bold;
+            color: #333;
+        }
+        pre {
+            background-color: #f4f4f4;
+            padding: 10px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        .error {
+            color: red;
+        }
+        .hello{
+            
+            display: flex;
+            flex-direction: column;
+           
+        }
+        /* From Uiverse.io by ShrinilDhorda */ 
+/* From Uiverse.io by joe-watson-sbf */ 
+.btn {
+  font-size: 17px;
+  background: transparent;
+  border: none;
+  padding: 1em 1.5em;
+  color: #ffedd3;
+  text-transform: uppercase;
+  position: relative;
+  transition: 0.5s ease;
+  cursor: pointer;
+}
+
+.btn::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 2px;
+  width: 0;
+  background-color: #ffc506;
+  transition: 0.5s ease;
+}
+
+.btn:hover {
+  color: #1e1e2b;
+  transition-delay: 0.5s;
+}
+
+.btn:hover::before {
+  width: 100%;
+}
+
+.btn::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 0;
+  width: 100%;
+  background-color: #ffc506;
+  transition: 0.4s ease;
+  z-index: -1;
+}
+
+.btn:hover::after {
+  height: 100%;
+  transition-delay: 0.4s;
+  color: aliceblue;
+}
+
+    </style>
+    <script>
+        function showModel(modelId) {
+            // Hide all containers
+            document.querySelectorAll('.model-container').forEach(container => {
+                container.style.display = 'none';
+            });
+            // Show the selected model container
+            document.getElementById(modelId).style.display = 'block';
+        }
+    </script>
+</head>
+<body>
+    <h1>Model Summaries</h1>
+    <p>Select a model to view its summary:</p>
+
+    <!-- Buttons for each model -->
+    {% for model_name in model_summaries.keys() %}
+    <div class="hello">
+
+        <button class="btn" onclick="showModel('model-{{ loop.index }}')">{{ model_name }}</button>
+    </div>
+    {% endfor %}
+
+    <!-- Summaries for each model -->
+    {% for model_name, summary in model_summaries.items() %}
+    <div id="model-{{ loop.index }}" class="model-container">
+        <div class="model-title">{{ model_name }}</div>
+        <pre class="{% if 'Error' in summary %}error{% endif %}">{{ summary }}</pre>
+    </div>
+    {% endfor %}
+</body>
+</html>
