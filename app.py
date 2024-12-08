@@ -15,13 +15,13 @@ model_summaries = {}
 def inspect_h5_file(file_path):
     try:
         with h5py.File(file_path, 'r') as f:
-            keys = list(f.keys())
+            keys  = list(f.keys())
             return f"File contents: {keys}"
     except Exception as e:
         return f"Error inspecting file: {str(e)}"
 
 # Function to load models and capture their summaries
-def load_model_summaries():
+def load_model_summaries(): 
     for file_name in os.listdir(models_folder):
         if file_name.endswith('.h5'):
             model_path = os.path.join(models_folder, file_name)
@@ -34,7 +34,7 @@ def load_model_summaries():
                 summary_stream.close()
                 model_summaries[file_name] = summary
             except Exception as e:
-                # Inspect `.h5` file for debugging if model loading fails
+                # Inspect `.h5` file for  debugging if model loading fails
                 file_info = inspect_h5_file(model_path)
                 model_summaries[file_name] = (
                     f"Error loading model: {str(e)}\n"
