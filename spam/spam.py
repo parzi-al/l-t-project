@@ -1,52 +1,74 @@
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import LabelEncoder
+# Import required libraries
 import pandas as pd
-import numpy as np
-import tensorflow as tf
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense, Dropout
-
+from sklearn.model_selection import train_test_split
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics import accuracy_score, classification_report
+from sklearn.naive_bayes import MultinomialNB
+from sklearn.linear_model import LogisticRegression
+import os
+import joblib
 # Load the dataset
-data = pd.read_csv("emails.csv")  # Replace with your dataset file path
+data = pd.read_csv("emails.csv")  # Replace with the path to your dataset file
 
-# Ensure all entries in the 'text' column are strings
-data['text'] = data['text'].astype(str)
+# Print the column names to verify them
+print("Columns in dataset:", data.columns)
 
-# Remove rows with empty strings or whitespace-only strings
-data['text'] = data['text'].str.strip()  # Remove leading/trailing whitespace
-data = data[data['text'] != '']  # Remove empty rows
+# Assume the email content is stored in a column named 'text' and label as 'spam'
+data['text'] = data['text'].astype(str)  # Ensure all email text content are strings
+data['spam'] = data['spam'].astype(int)  # Ensure labels are integers (spam = 1, not spam = 0)
 
-# Vectorizing the text using TF-IDF
-tfidf = TfidfVectorizer(stop_words="english", max_df=0.7)
-X = tfidf.fit_transform(data["text"]).toarray()
+# Preprocess data: remove leading/trailing whitespace
+data['text'] = data['text'].str.strip()
 
-# Encode labels (Convert "spam" to numerical if not already)
-label_encoder = LabelEncoder()
-y = label_encoder.fit_transform(data["spam"])  # Replace "spam" with your label column name
+# Feature extraction using TF-IDF
+vectorizer = TfidfVectorizer(stop_words='english', max_df=0.7)
+X = vectorizer.fit_transform(data['text'])  # Features are 'text' column
+y = data['spam']  # Target labels (spam = 1, not spam = 0)
 
-# Split the dataset into training and testing sets
+# Split the data into training and testing sets
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
 
-# Create a Keras Sequential model
-model = Sequential([
-    Dense(128, activation="relu", input_shape=(X_train.shape[1],)),
-    Dropout(0.5),
-    Dense(64, activation="relu"),
-    Dropout(0.5),
-    Dense(1, activation="sigmoid")  # Binary classification output
-])
+# Train and evaluate using Naive Bayes
+nb_model = MultinomialNB()
+nb_model.fit(X_train, y_train)
+y_pred_nb = nb_model.predict(X_test)
+print("\n--- Naive Bayes ---")
+print("Accuracy:", accuracy_score(y_test, y_pred_nb))
+print(classification_report(y_test, y_pred_nb))
 
-# Compile the model
-model.compile(optimizer="adam", loss="binary_crossentropy", metrics=["accuracy"])
+# Train and evaluate using Logistic Regression
+lr_model = LogisticRegression(max_iter=500, random_state=42)
+lr_model.fit(X_train, y_train)
+y_pred_lr = lr_model.predict(X_test)
+print("\n--- Logistic Regression ---")
+print("Accuracy:", accuracy_score(y_test, y_pred_lr))
+print(classification_report(y_test, y_pred_lr))
 
-# Train the model
-model.fit(X_train, y_train, epochs=10, batch_size=32, validation_data=(X_test, y_test))
+# Take input for a new email text and predict if it's spam or not
+def predict_spam(email_text):
+    email_tfidf = vectorizer.transform([email_text])
+    prediction_nb = nb_model.predict(email_tfidf)
+    prediction_lr = lr_model.predict(email_tfidf)
+    
+    print("\nPredictions for given email text:")
+    print("Naive Bayes Prediction:", "Spam" if prediction_nb[0] == 1 else "Not Spam")
+    print("Logistic Regression Prediction:", "Spam" if prediction_lr[0] == 1 else "Not Spam")
 
-# Evaluate the model
-loss, accuracy = model.evaluate(X_test, y_test)
-print(f"Test Accuracy: {accuracy:.2f}")
+# Example: Input an email text
+new_email = input("Enter the email text to check: ")
+predict_spam(new_email)
 
-# Save the trained model as spam.h5
-model.save("spam.h5")
-print("Model saved as 'spam.h5'")
+
+# Ensure the `models/` folder exists
+model_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../models")
+os.makedirs(model_dir, exist_ok=True)
+
+# Save the models with 'spam' as prefix
+print("Saving models...")
+joblib.dump(nb_model, os.path.join(model_dir, "spam_naive_bayes.pkl"))  # Naive Bayes Model
+joblib.dump(lr_model, os.path.join(model_dir, "spam_logistic_regression.pkl"))  # Logistic Regression Model
+# Save the vectorizer
+joblib.dump(vectorizer, os.path.join(model_dir, "spam_vectorizer.pkl"))
+print("Vectorizer saved successfully.")
+
+print("Models saved successfully in the `models/` folder.")
