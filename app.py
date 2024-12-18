@@ -1,55 +1,98 @@
+from flask import Flask, render_template, request
+import joblib
 import os
-from flask import Flask, render_template
-import tensorflow as tf
-from io import StringIO
-import h5py
+import numpy as np
+from sklearn.datasets import load_digits
+import matplotlib.pyplot as plt
+import seaborn as sns
 
-# Initialize Flask app
 app = Flask(__name__)
 
-# Path to the models folder
-models_folder = './models'
-model_summaries = {}
+# Configuration
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+STATIC_DIR = os.path.join(BASE_DIR, "static")
+MODEL_DIR = os.path.join(BASE_DIR, "models")
+os.makedirs(STATIC_DIR, exist_ok=True)
 
-# Function to inspect `.h5` file content
-def inspect_h5_file(file_path):
-    try:
-        with h5py.File(file_path, 'r') as f:
-            keys  = list(f.keys())
-            return f"File contents: {keys}"
-    except Exception as e:
-        return f"Error inspecting file: {str(e)}"
+# Load Models
+def load_model(file_name):
+    model_path = os.path.join(MODEL_DIR, file_name)
+    return joblib.load(model_path) if os.path.exists(model_path) else None
 
-# Function to load models and capture their summaries
-def load_model_summaries(): 
-    for file_name in os.listdir(models_folder):
-        if file_name.endswith('.h5'):
-            model_path = os.path.join(models_folder, file_name)
-            try:
-                # Load the model and generate the summary
-                model = tf.keras.models.load_model(model_path)
-                summary_stream = StringIO()
-                model.summary(print_fn=lambda x: summary_stream.write(x + "\n"))
-                summary = summary_stream.getvalue()
-                summary_stream.close()
-                model_summaries[file_name] = summary
-            except Exception as e:
-                # Inspect `.h5` file for  debugging if model loading fails
-                file_info = inspect_h5_file(model_path)
-                model_summaries[file_name] = (
-                    f"Error loading model: {str(e)}\n"
-                    f"Additional Info: {file_info}"
-                )
+models = {name: load_model(f"{name}.pkl") for name in [
+    "digits_pca_model", "digits_tsne_model", "house_linear_regression_model",
+    "house_random_forest_model", "cust_Logistic_Regression", "cust_Random_Forest",
+    "spam_logistic_regression", "spam_naive_bayes"
+]}
 
-# Load all model summaries at startup
-load_model_summaries()
+scalers = {"churn_scaler": load_model("cust_scaler.pkl")}
+vectorizer = load_model("spam_vectorizer.pkl")
+digits = load_digits()
 
-# Home page route
-@app.route('/')
+# Plot Helper Functions
+def save_plot(filename, plot_func, *args, **kwargs):
+    filepath = os.path.join(STATIC_DIR, filename)
+    if not os.path.exists(filepath):
+        plot_func(*args, **kwargs)
+        plt.savefig(filepath)
+        plt.close()
+
+@app.route("/", methods=["GET", "POST"])
 def index():
-    # Pass model summaries to the HTML template
-    return render_template('index.html', model_summaries=model_summaries)
+    predictions, show_images, error = {}, False, None
 
-# Run the Flask app
-if __name__ == '__main__':
-    app.run(debug=True)
+    try:
+        if request.method == "POST":
+            form_data = request.form
+
+            if "generate_plots" in form_data:
+                pca_data = models['digits_pca_model'].transform(digits.data)
+                save_plot("pca_plot.png", sns.scatterplot, x=pca_data[:, 0], y=pca_data[:, 1], hue=digits.target, palette="viridis")
+                tsne_data = models['digits_tsne_model'].fit_transform(digits.data)
+                save_plot("tsne_plot.png", sns.scatterplot, x=tsne_data[:, 0], y=tsne_data[:, 1], hue=digits.target, palette="coolwarm")
+                show_images = True
+
+            # House Prediction
+            if "LotArea" in form_data:
+                house_features = np.array([[
+                    float(form_data.get("LotArea", 0)),
+                    int(form_data.get("OverallQual", 0)),
+                    int(form_data.get("OverallCond", 0)),
+                    float(form_data.get("GrLivArea", 0)),
+                    int(form_data.get("BedroomAbvGr", 0)),
+                    int(form_data.get("YearBuilt", 0)),
+                ]])
+                predictions['house_linear'] = models['house_linear_regression_model'].predict(house_features)[0]
+                predictions['house_rf'] = models['house_random_forest_model'].predict(house_features)[0]
+
+            # Churn Prediction
+            if "Age" in form_data:
+                churn_features = np.array([[
+                    float(form_data.get("Age", 0)),
+                    1 if form_data.get("Gender", "Male") == "Female" else 0,
+                    int(form_data.get("Tenure", 0)),
+                    int(form_data.get("UsageFrequency", 0)),
+                    int(form_data.get("SupportCalls", 0)),
+                    int(form_data.get("PaymentDelay", 0)),
+                    1 if form_data.get("SubscriptionType", "Standard") == "Premium" else 0,
+                    int(form_data.get("ContractLength", 0)),
+                    float(form_data.get("TotalSpend", 0)),
+                    int(form_data.get("LastInteraction", 0)),
+                ]])
+                scaled_features = scalers['churn_scaler'].transform(churn_features)
+                predictions['churn_linear'] = "Churn" if models['cust_Logistic_Regression'].predict(scaled_features)[0] else "No Churn"
+                predictions['churn_rf'] = "Churn" if models['cust_Random_Forest'].predict(scaled_features)[0] else "No Churn"
+
+            # Spam Detection
+            if "email_text" in form_data:
+                email_tfidf = vectorizer.transform([form_data["email_text"]])
+                predictions['spam_logistic'] = "Spam" if models['spam_logistic_regression'].predict(email_tfidf)[0] else "Not Spam"
+                predictions['spam_nb'] = "Spam" if models['spam_naive_bayes'].predict(email_tfidf)[0] else "Not Spam"
+
+    except Exception as e:
+        error = str(e)
+
+    return render_template("index.html", predictions=predictions, show_images=show_images, error=error)
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)

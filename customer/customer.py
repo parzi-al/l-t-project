@@ -1,37 +1,37 @@
+# Import necessary libraries
 import pandas as pd
+import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
 from sklearn.linear_model import LogisticRegression
+from sklearn.svm import SVC
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.naive_bayes import GaussianNB
-from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.metrics import accuracy_score, confusion_matrix, classification_report
-import h5py
-import pickle
-import numpy as np
+from sklearn.preprocessing import StandardScaler, LabelEncoder
+import joblib
 
-# Load the dataset
-df = pd.read_csv('customer_churn_dataset-training-master.csv')
+# Load and preprocess the data
+df = pd.read_csv("customer_churn_dataset-training-master.csv")  # Adjust the path
+df = df.drop(columns=['CustomerID'])  # Drop unneeded column
 
-# Handle missing values
-numerical_cols = df.select_dtypes(include=['float64', 'int64']).columns
-categorical_cols = df.select_dtypes(include=['object']).columns
-
-# Fill missing values
-df[numerical_cols] = df[numerical_cols].fillna(df[numerical_cols].median())
-for column in categorical_cols:
-    df[column] = df[column].fillna(df[column].mode()[0])
+# Drop rows with NaN in the target column (Churn)
+df = df.dropna(subset=['Churn'])  # Ensure no missing target values
 
 # Encode categorical variables
 label_encoder = LabelEncoder()
-for column in categorical_cols:
+for column in df.select_dtypes(include=['object']).columns:
     df[column] = label_encoder.fit_transform(df[column])
 
 # Split data into features and target
-X = df.drop(['Churn'], axis=1)
+X = df.drop('Churn', axis=1)
 y = df['Churn']
 
-# Train-test split
+# Check for NaN in features or target and clean if necessary
+X = X.dropna()  # Drop rows with NaN in features
+y = y[X.index]  # Align y with cleaned X
+
+# Split into training and testing sets
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
 
 # Scale features
@@ -39,48 +39,67 @@ scaler = StandardScaler()
 X_train_scaled = scaler.fit_transform(X_train)
 X_test_scaled = scaler.transform(X_test)
 
+# Save the scaler for later use
+joblib.dump(scaler, "scaler.pkl")
+
 # Define classifiers
 classifiers = {
     'Random Forest': RandomForestClassifier(n_estimators=100, random_state=42),
     'Logistic Regression': LogisticRegression(max_iter=2000),
+    'Support Vector Machine': SVC(),
     'K-Nearest Neighbors': KNeighborsClassifier(),
     'Gradient Boosting': GradientBoostingClassifier(),
     'Naive Bayes': GaussianNB()
 }
 
-# Dictionary to store trained models
-trained_models = {}
+# Function to evaluate, save, and load models
+def train_and_save_model(name, model, X_train, y_train):
+    print(f"Training {name}...")
+    model.fit(X_train, y_train)
+    joblib.dump(model, f"{name.replace(' ', '_')}.pkl")  # Save the model
+    print(f"Model {name} saved successfully.\n")
 
-# Function to train and evaluate a single model
-def evaluate_model(name, model):
-    print(f"\n{name}")
-    model.fit(X_train_scaled, y_train)
-    y_pred = model.predict(X_test_scaled)
+# Train, save, and predict for all models
+for name, model in classifiers.items():
+    train_and_save_model(name, model, X_train_scaled, y_train)
+    print(f"Model {name} training complete!")
 
-    # Save the trained model in a dictionary
-    trained_models[name] = model
+# Function to predict using a selected model
+def predict_input(model_name, input_data):
+    # Load the model and scaler
+    model = joblib.load(f"{model_name.replace(' ', '_')}.pkl")
+    scaler = joblib.load("scaler.pkl")
 
-    # Performance metrics
-    accuracy = accuracy_score(y_test, y_pred)
-    conf_matrix = confusion_matrix(y_test, y_pred)
-    class_report = classification_report(y_test, y_pred)
+    # Convert input data to DataFrame
+    input_df = pd.DataFrame([input_data], columns=X.columns)
 
-    # Print results
-    print(f"Accuracy: {accuracy:.4f}")
-    print("Confusion Matrix:")
-    print(conf_matrix)
-    print("Classification Report:")
-    print(class_report)
+    # Encode categorical variables using the same LabelEncoder
+    for column in df.select_dtypes(include=['object']).columns:
+        input_df[column] = label_encoder.fit_transform(input_df[column])
 
-# Evaluate and run each model separately
-for model_name, model_instance in classifiers.items():
-    evaluate_model(model_name, model_instance)
+    # Scale input data
+    input_scaled = scaler.transform(input_df)
 
-# Save all trained models into an HDF5 file
-with h5py.File('customer_models.h5', 'w') as h5f:
-    for model_name, model in trained_models.items():
-        # Serialize the model using pickle and save as binary in the HDF5 file
-        model_bytes = pickle.dumps(model)
-        h5f.create_dataset(model_name, data=np.void(model_bytes))
+    # Make prediction
+    prediction = model.predict(input_scaled)
+    return prediction
 
-print("\nAll models have been saved in 'customer_models.h5'.")
+# Example input for prediction
+print("\n--- Predicting New Data ---")
+new_input = {
+    'Age': 30,
+    'Gender': 0,  # 0 for Male, 1 for Female
+    'Tenure': 39,
+    'Usage Frequency': 14,
+    'Support Calls': 5,
+    'Payment Delay': 18,
+    'Subscription Type': 1,  # Encoded value
+    'Contract Length': 0,    # Encoded value
+    'Total Spend': 932,
+    'Last Interaction': 17
+}
+
+# Predict churn using a specific model
+model_to_use = "Random Forest"
+output = predict_input(model_to_use, new_input)
+print(f"Prediction using {model_to_use}: {'Churn' if output[0] == 1 else 'No Churn'}")

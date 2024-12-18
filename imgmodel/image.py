@@ -1,72 +1,72 @@
-# Import necessary libraries
+import os
+import joblib
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.decomposition import PCA
 from sklearn.datasets import load_digits
 from sklearn.manifold import TSNE
-import h5py
 
-# Load the dataset (MNIST-like digits dataset from sklearn)
+# Load the dataset (MNIST-Like digits dataset from sklearn)
 digits = load_digits()
 
 # Separate data and labels
 X = digits.data  # The image data (each image is 8x8, flattened to 64 features)
-y = digits.target  # Labels for each image (digits: 0-9)
+y = digits.target  # Labels for each image (digit: 0-9)
 
-# 1. Visualize some sample images from the dataset
+# Visualize some sample images from the dataset
 def plot_sample_images(data, labels, n=10):
     plt.figure(figsize=(10, 5))
-    for i in range(1, n + 1):
-        plt.subplot(1, n, i)
-        plt.imshow(data[i - 1].reshape(8, 8), cmap=plt.cm.gray)
-        plt.title(f"Label: {labels[i - 1]}")
-        plt.axis("off")
-    plt.show()
+    for index, (image, label) in enumerate(zip(data[:n], labels[:n])):
+        plt.subplot(2, n // 2, index + 1)
+        plt.imshow(image.reshape(8, 8), cmap=plt.cm.gray)
+        plt.title(f'Label: {label}')
+        plt.axis('off')
+    plt.savefig('../static/sample_images.png')
+    plt.close()
 
 plot_sample_images(X, y)
 
-# 2. Dimensionality Reduction using PCA
-# Reduce data from 64 dimensions to 2 for visualization
+# 1. Dimensionality Reduction using PCA
 pca = PCA(n_components=2)
 X_pca = pca.fit_transform(X)
 
-# a. Visualizing the reduced data with PCA
+# 2. Visualizing the reduced data with PCA
 def plot_pca(X_pca, y):
     plt.figure(figsize=(8, 6))
-    sns.scatterplot(x=X_pca[:, 0], y=X_pca[:, 1], hue=y, palette="viridis", legend="full", s=40)
-    plt.title("PCA: MNIST Digits in 2D")
-    plt.xlabel("Principal Component 1")
-    plt.ylabel("Principal Component 2")
-    plt.show()
+    sns.scatterplot(x=X_pca[:, 0], y=X_pca[:, 1], hue=y, palette="viridis", legend="full", s=60)
+    plt.title('PCA: MNIST Digits in 2D')
+    plt.savefig('../static/pca_plot.png')
+    plt.close()
 
 plot_pca(X_pca, y)
 
 # 3. Dimensionality Reduction using t-SNE
-# t-SNE is often better at preserving local structure in high-dimensional data
 tsne = TSNE(n_components=2, random_state=42)
 X_tsne = tsne.fit_transform(X)
 
-# b. Visualizing the reduced data with t-SNE
+# 4. Visualizing the reduced data with t-SNE
 def plot_tsne(X_tsne, y):
     plt.figure(figsize=(8, 6))
-    sns.scatterplot(x=X_tsne[:, 0], y=X_tsne[:, 1], hue=y, palette="coolwarm", legend="full", s=40)
-    plt.title("t-SNE: MNIST Digits in 2D")
-    plt.xlabel("t-SNE Component 1")
-    plt.ylabel("t-SNE Component 2")
-    plt.show()
+    sns.scatterplot(x=X_tsne[:, 0], y=X_tsne[:, 1], hue=y, palette="coolwarm", legend="full", s=60)
+    plt.title('t-SNE: MNIST Digits in 2D')
+    plt.savefig('../static/tsne_plot.png')
+    plt.close()
 
 plot_tsne(X_tsne, y)
 
-# 4. Comparing PCA and t-SNE for MNIST Visualization
-# Calculate total variance for PCA to understand how much information is retained
-explained_variance = np.sum(pca.explained_variance_ratio_) * 100
-print(f"Variance explained by PCA components: {explained_variance:.2f}%")
+# 5. Analysis: Comparing PCA and t-SNE for MNIST Visualization
+print(f'Explained variance by PCA components: {pca.explained_variance_ratio_}')
+print(f'Total variance explained by 2 components: {np.sum(pca.explained_variance_ratio_):.4f}')
 
-# 5. Save PCA and t-SNE results to an HDF5 file
-with h5py.File('image.h5', 'w') as h5f:
-    h5f.create_dataset('PCA', data=X_pca)
-    h5f.create_dataset('t-SNE', data=X_tsne)
-    h5f.create_dataset('Labels', data=y)
+# 6. Save the PCA and t-SNE models
+# Ensure the `models/` folder exists
+model_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../models")
+os.makedirs(model_dir, exist_ok=True)
 
-print("\nPCA and t-SNE results have been saved to 'image.h5'.")
+# Save the models with 'digits' as prefix
+print("Saving models...")
+joblib.dump(pca, os.path.join(model_dir, "digits_pca_model.pkl"))  # PCA Model
+joblib.dump(tsne, os.path.join(model_dir, "digits_tsne_model.pkl"))  # t-SNE Model
+
+print("Models saved successfully in the `models/` folder.")
