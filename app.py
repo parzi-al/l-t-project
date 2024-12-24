@@ -5,26 +5,24 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.datasets import load_digits
-from celery import Celery
-import time
-from celery.result import AsyncResult
 
 app = Flask(__name__)
+
 # Paths
 static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 model_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "models")
 os.makedirs(static_dir, exist_ok=True)
 
-# Setup Celery
-app_celery = Celery(app.name, broker='redis://localhost:6379/0')
-app_celery.conf.update(app.config)
-
 # Load Models and Check Existence
 def load_model(file_name):
     try:
-        return joblib.load(os.path.join(model_dir, file_name))
-    except FileNotFoundError:
-        print(f"Error: {file_name} not found.")
+        model_path = os.path.join(model_dir, file_name)
+        if os.path.exists(model_path):
+            return joblib.load(model_path)
+        else:
+            raise FileNotFoundError(f"{file_name} not found.")
+    except Exception as e:
+        print(f"Error loading {file_name}: {str(e)}")
         return None
 
 models = {
@@ -80,30 +78,21 @@ def plot_tsne(X_tsne, y):
     plt.savefig(os.path.join(static_dir, "tsne_plot.png"))
     plt.close()
 
-@app_celery.task
-def generate_plots_task():
-    # Simulating long-running task (plot generation)
-    time.sleep(5)  # Simulate delay
-    X_pca = models['digits_pca'].transform(digits.data)
-    plot_pca(X_pca, digits.target)
-    X_tsne = models['digits_tsne'].fit_transform(digits.data)
-    plot_tsne(X_tsne, digits.target)
-    return "Plots generated"
-
 @app.route("/", methods=["GET", "POST"])
 def index():
     predictions = {}
     show_images = False
     error = None
-    task_id = None
 
     if request.method == "POST":
         try:
             if "generate_plots" in request.form:
-                # Call Celery task asynchronously
-                task = generate_plots_task.apply_async()
-                task_id = task.id  # Store the task ID for later tracking
-                show_images = False  # Wait for the background task to complete
+                # Generate plots synchronously
+                X_pca = models['digits_pca'].transform(digits.data)
+                plot_pca(X_pca, digits.target)
+                X_tsne = models['digits_tsne'].fit_transform(digits.data)
+                plot_tsne(X_tsne, digits.target)
+                show_images = True
 
             # House Price Predictions
             house_features = [
@@ -136,10 +125,6 @@ def index():
 
             predictions['churn_linear'] = "Churn" if models['churn_linear'].predict(churn_features_scaled)[0] else "No Churn"
             predictions['churn_rf'] = "Churn" if models['churn_rf'].predict(churn_features_scaled)[0] else "No Churn"
-            predictions['churn_nb'] = "Churn" if models['churn_nb'].predict(churn_features_scaled)[0] else "No Churn"
-            predictions['churn_gb'] = "Churn" if models['churn_gb'].predict(churn_features_scaled)[0] else "No Churn"
-            predictions['churn_knn'] = "Churn" if models['churn_knn'].predict(churn_features_scaled)[0] else "No Churn"
-            predictions['churn_svm'] = "Churn" if models['churn_svm'].predict(churn_features_scaled)[0] else "No Churn"
 
             # Spam Detection
             email_text = request.form.get("email_text", "")
@@ -151,13 +136,7 @@ def index():
         except Exception as e:
             error = f"An error occurred: {str(e)}"
 
-    # Check the status of the background task
-    if task_id:
-        task = generate_plots_task.AsyncResult(task_id)
-        if task.state == 'SUCCESS':
-            show_images = True  # Show the generated images once the task is complete
-
-    return render_template("index.html", predictions=predictions, show_images=show_images, error=error, task_id=task_id)
+    return render_template("index.html", predictions=predictions, show_images=show_images, error=error)
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=6000)
+    app.run(host="0.0.0.0", port=5000, debug=True)
